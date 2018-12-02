@@ -16,7 +16,7 @@ FindLargestLine <- function(file){
     maxLine=0
     
     while( length(curLine <- readLines(con, 1, skipNul = T)) > 0){
-      maxLine <- max(maxLine, nchar(curLine))
+        maxLine <- max(maxLine, nchar(curLine))
     }
     close(con)
     maxLine
