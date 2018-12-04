@@ -2,6 +2,7 @@ srcDir <- dirname(sys.frame(1)$ofile)
 dataDir <- file.path(srcDir, "..", "data")
 swiftFile <- file.path(dataDir, "swiftkey.zip")
 
+# This function takes a file name and writes a number of randomly selected lines to another file.
 FinalToSmallFile <- function (fileIn, fileOut, nLinesOut){
     nLinesIn <- system(paste("wc -l", fileIn), intern = T)
     nLinesIn <- as.integer(strsplit(nLinesIn, "[ ]{1,}")[[1]][2])
