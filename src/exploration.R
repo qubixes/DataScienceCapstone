@@ -25,7 +25,8 @@ ExploreTDM <- function(tdm, gram){
     allDf <- gather(allDf, key="file", value="count", -word)
     allDf <- mutate(allDf, freq = count/totCounts[file])
     
-    plot_tdm <- ggplot(allDf, aes(x=word, y=freq, fill=file))+geom_bar(stat="identity", position=position_dodge())
+    plot_tdm <- ggplot(allDf, aes(x=word, y=freq, fill=file))+geom_bar(stat="identity", position=position_dodge()) + 
+        theme(axis.text.x=element_text(angle=90, hjust=1))
     dfCumFreq <- data.frame(fraction=(1:length(cumFreq))/length(cumFreq), cumFreq=cumFreq, gram=gram)
     rownames(dfCumFreq) <- NULL
     list(plot_tdm, dfCumFreq)
@@ -35,7 +36,7 @@ BigramTokenizer <- function(x){ unlist(lapply(ngrams(words(x), 2), paste, collap
 TrigramTokenizer <- function(x){ unlist(lapply(ngrams(words(x), 3), paste, collapse = " "), use.names = FALSE) }
 
 
-curDir <- file.path(dataDir, "small", "en_US")
+curDir <- file.path(devDir, "en_US")
 
 tmData <- VCorpus(DirSource(curDir), readerControl = list(reader = readPlain, language = "en_US", load = TRUE))
 tdm <- TermDocumentMatrix(tmData, list(stemming = FALSE, stopwords = FALSE))

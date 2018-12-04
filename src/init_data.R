@@ -3,26 +3,43 @@ dataDir <- file.path(srcDir, "..", "data")
 swiftFile <- file.path(dataDir, "swiftkey.zip")
 
 # This function takes a file name and writes a number of randomly selected lines to another file.
-FinalToSmallFile <- function (fileIn, fileOut, nLinesOut){
-    nLinesIn <- system(paste("wc -l", fileIn), intern = T)
+CreateTrainDevTest <- function (srcFile, dstFiles, nLinesDev, nLinesTest){
+    trainFile <- dstFiles[1]
+    devFile   <- dstFiles[2]
+    testFile  <- dstFiles[3]
+    
+    nLinesIn <- system(paste("wc -l", srcFile), intern = T)
     nLinesIn <- as.integer(strsplit(nLinesIn, "[ ]{1,}")[[1]][2])
     
-    chooseLines <- sample(nLinesIn, nLinesOut)
-    chooseLines <- chooseLines[order(chooseLines)]
-    
-    con <- file(fileIn, "r", encoding="UTF-8")
-    conOut <- file(fileOut, "w")
-    nOcc=0
-    curChoice=1
+    devTestLines <- sample(nLinesIn, nLinesDev+nLinesTest)
+    devLines <- devTestLines[1:nLinesDev]
+    testLines <- devTestLines[-(1:nLinesDev)]
+    devLines <- devLines[order(devLines)]
+    testLines <- testLines[order(testLines)]
+
+    conSrc   <- file(srcFile, "r", encoding="UTF-8")
+    conTrain <- file(trainFile, "w")
+    conDev   <- file(devFile, "w")
+    conTest  <- file(testFile, "w")
+
+    curDevChoice=1
+    curTestChoice=1
     for(i in seq(nLinesIn)){
-        curLine <- readLines(con, 1, skipNul = T)
-        if(curChoice <= nLinesOut && i == chooseLines[curChoice]){
-            writeLines(curLine, conOut)
-            curChoice <- curChoice+1
+        curLine <- readLines(conSrc, 1, skipNul = T)
+        if(curDevChoice <= nLinesDev && i == devLines[curDevChoice]){
+            writeLines(curLine, conDev)
+            curDevChoice <- curDevChoice+1
+        }
+        else if(curTestChoice <= nLinesTest && i == testLines[curTestChoice]){
+            writeLines(curLine, conTest)
+            curTestChoice <- curTestChoice+1
+        }
+        else{
+            writeLines(curLine, conTrain)
         }
     }
-    close(con)
-    close(conOut)
+    close(conSrc); close(conTrain)
+    close(conDev); close(conTest)
 }
 
 
@@ -32,18 +49,24 @@ if(!file.exists(swiftFile)){
     unzip(swiftFile)
 }
 
-smallDir <- file.path(dataDir, "small")
-if(!dir.exists(smallDir)){
-    dir.create(smallDir)
+allNewDirs = file.path(dataDir, c("train", "dev", "test"))
+testDir <- allNewDirs[1]
+devDir <- allNewDirs[2]
+trainDir <- allNewDirs[3]
+
+if(sum(!dir.exists(allNewDirs))){
+    for(dir in allNewDirs) dir.create(dir, showWarnings = F)
+    
     set.seed(128371)
     languages <- dir(file.path(dataDir, "final"))
+    
     for (language in languages){
-        curFinalDir <- file.path(dataDir, "final", language)
-        curSmallDir <- file.path(smallDir, language)
-        dir.create(curSmallDir, showWarnings = F)
-        curFiles <- dir(curFinalDir)
+        curSrcDir <- file.path(dataDir, "final", language)
+        curDstDirs <- file.path(allNewDirs, language)
+        for(dir in curDstDirs) dir.create(dir, showWarnings = F)
+        curFiles <- dir(curSrcDir)
         for (file in curFiles){
-            FinalToSmallFile(file.path(curFinalDir, file), file.path(curSmallDir, file), 10000)
+            CreateTrainDevTest(file.path(curSrcDir, file), file.path(curDstDirs, file), 10000, 10000)
         }
     }
 }
