@@ -4,7 +4,7 @@ source(file.path(srcDir, "corpus.R"))
 
 
 CreateConstantPredictor <- function(trainDir, language){
-    tmData <- VCorpus(DirSource(curDir), readerControl = list(reader = readPlain, language = language, load = TRUE))
+    tmData <- VCorpus(DirSource(trainDir), readerControl = list(reader = readPlain, language = language, load = TRUE))
     tdm <- TermDocumentMatrix(tmData)
     freqTable <- TDM2FrequencyTable(tdm)
     
