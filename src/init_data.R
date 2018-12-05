@@ -50,9 +50,9 @@ if(!file.exists(swiftFile)){
 }
 
 allNewDirs = file.path(dataDir, c("train", "dev", "test"))
-testDir <- allNewDirs[1]
-devDir <- allNewDirs[2]
-trainDir <- allNewDirs[3]
+trainDir <- allNewDirs[1]
+devDir   <- allNewDirs[2]
+testDir  <- allNewDirs[3]
 
 if(sum(!dir.exists(allNewDirs))){
     for(dir in allNewDirs) dir.create(dir, showWarnings = F)

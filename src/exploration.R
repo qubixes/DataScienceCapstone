@@ -7,6 +7,8 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 
+
+
 ExploreTDM <- function(tdm, gram){
     textMatrix <- as.matrix(tdm)
     
