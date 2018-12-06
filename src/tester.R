@@ -65,11 +65,12 @@ StraightenResults <- function(results, n){
     matr
 }
 
-GetPredictorResults <- function(datadir, makePredictor){
-    languages <- dir(datadir)
-    allDirs <- file.path(datadir, languages)
-    predictors <- mapply(makePredictor, allDirs, languages, SIMPLIFY = F)
-    results <- mapply(Tester, allDirs, predictors, SIMPLIFY = F)
+GetPredictorResults <- function(trainDir, testDir, makePredictor){
+    languages <- dir(testDir)
+    allTrainDirs <- file.path(trainDir, languages)
+    allTestDirs <- file.path(testDir, languages)
+    predictors <- mapply(makePredictor, allTrainDirs, languages, SIMPLIFY = F)
+    results <- mapply(Tester, allTestDirs, predictors, SIMPLIFY = F)
     results <- StraightenResults(results, length(languages))
     colnames(results) <- gsub(".txt$", "", colnames(results))
     colnames(results) <- gsub("^de_DE.", "", colnames(results))
@@ -81,6 +82,19 @@ PlotResults <- function(results){
     plot_tdm <- ggplot(small_results, aes(x=language, y=indiv_score, fill=source))+
         geom_bar(stat="identity", position=position_dodge()) + theme(axis.text.x=element_text(angle=90, hjust=1))
     plot_tdm
+}
+
+
+if(!exists("monogram_results")){
+    monogram_results <- GetPredictorResults(devDir, testDir, TrainMonogramPredictor)
+}
+
+if(!exists("bigram_results")){
+    bigram_results <- GetPredictorResults(devDir, testDir, TrainBigramPredictor)
+}
+
+if(!exists("trigram_results")){
+    trigram_results <- GetPredictorResults(devDir, testDir, TrainTrigramPredictor)
 }
 
 # results <- GetPredictorResults(testDir, CreateConstantPredictor)

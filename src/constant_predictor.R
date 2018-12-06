@@ -3,7 +3,7 @@ source(file.path(srcDir, "init_data.R"))
 source(file.path(srcDir, "corpus.R"))
 
 
-CreateConstantPredictor <- function(trainDir, language){
+TrainMonogramPredictor <- function(trainDir, language){
     tmData <- VCorpus(DirSource(trainDir), readerControl = list(reader = readPlain, language = language, load = TRUE))
     tdm <- TermDocumentMatrix(tmData)
     freqTable <- TDM2FrequencyTable(tdm)
@@ -31,21 +31,7 @@ WordCleaner <- function(x){
 }
 
 RemoveTDMGarbage <- function(tmData){
-    # PatternRemover <- content_transformer(function(x, pattern) {return (gsub(pattern, "", x))})
     tmData <- tm_map(tmData, content_transformer(WordCleaner))
-    # tmData <- tm_map(tmData, removePunctuation)
-    # tmData <- tm_map(tmData, PatternRemover, '"')
-    # tmData <- tm_map(tmData, PatternRemover, "_")
-    # tmData <- tm_map(tmData, PatternRemover, "-")
-    # tmData <- tm_map(tmData, PatternRemover, "—")
-    # tmData <- tm_map(tmData, PatternRemover, "“")
-    # tmData <- tm_map(tmData, PatternRemover, "”")
-    # tmData <- tm_map(tmData, PatternRemover, "\u2013")
-    # tmData <- tm_map(tmData, PatternRemover, "…")
-    # tmData <- tm_map(tmData, PatternRemover, "·")
-    # tmData <- tm_map(tmData, PatternRemover, '["|_|“|”|\u2013|…|·|-]')
-    # 
-    # tmData <- tm_map(tmData, content_transformer(function(x){gsub()}))
     tmData
 }
 
@@ -93,18 +79,12 @@ PredictorListFromTM <- function(mytm){
 TrainBigramPredictor <- function(trainDir, language){
     tmData <- VCorpus(DirSource(trainDir), readerControl = list(reader = readPlain, language = language, load = TRUE))
     tmData <- RemoveTDMGarbage(tmData)
-    # tm_map(tmData, removePunctuation)
-    
-    
-    onegram_tdm <- TermDocumentMatrix(tmData)
     bigram_tdm <- TermDocumentMatrix(tmData, control = list(tokenize = CreateNGramTokenizer(2)))
-    # trigram_tdm <- TermDocumentMatrix(tmData, control = list(tokenize = CreateNGramTokenizer(3)))
-    
     bigramTextMatrix <- as.matrix(bigram_tdm)
     bigramTextMatrix <- bigramTextMatrix[rowSums(bigramTextMatrix)>2,]
-    # View(bigramTextMatrix)
+
     predictList <- PredictorListFromTM(bigramTextMatrix)
-    cPredictor <- CreateConstantPredictor(trainDir, language)
+    cPredictor <- TrainMonogramPredictor(trainDir, language)
     
     
     lastValues=character(1)
@@ -117,16 +97,53 @@ TrainBigramPredictor <- function(trainDir, language){
         if(cleanWord == "") cleanWord <- lastValues
         else lastValues <<- cleanWord
         
-        if(is.null(predictList[[cleanWord]])){
+        if(cleanWord == "" || is.null(predictList[[cleanWord]])){
             return(cPredictor$Next(cleanWord))
         }
-        return(predictList[[cleanWord]])
+        biPredict <- predictList[[cleanWord]]
+        nEmpty <- sum(biPredict == "")
+        biPredict[(4-nEmpty):3] <- cPredictor$Start()[1:nEmpty]
+        return(biPredict)
     }
+    print(paste("Finished training bigram predictor: ", language))
     list(Start = Start, Next = Next)
 }
 
-
-# btmDf <- mutate(btmDf, rate = mean(1:3))
-# btmDf <- mutate(btmDf, firstTerm = strsplit(terms, " ")[[1]][1], secondTerm = strsplit(terms, " ")[[1]][2])
+TrainTrigramPredictor <- function(trainDir, language){
+    tmData <- VCorpus(DirSource(trainDir), readerControl = list(reader = readPlain, language = language, load = TRUE))
+    tmData <- RemoveTDMGarbage(tmData)
+    
+    trigram_tdm <- TermDocumentMatrix(tmData, control = list(tokenize = CreateNGramTokenizer(3)))
+    
+    trigramTextMatrix <- as.matrix(trigram_tdm)
+    trigramTextMatrix <- trigramTextMatrix[rowSums(trigramTextMatrix)>2,]
+    
+    
+    biPredictor <- TrainBigramPredictor(trainDir, language)
+    predictList <- PredictorListFromTM(trigramTextMatrix)
+    
+    lastValues=character(2)
+    Start <- function(){
+        biPredictor$Start()
+    }
+    Next <- function(word){
+        cleanWord <- WordCleaner(word)
+        biPredict <- biPredictor$Next(cleanWord)
+        
+        if(cleanWord != ""){
+            lastValues[2] <<- lastValues[1]
+            lastValues[1] <<- cleanWord
+        }
+        newStr <- paste(lastValues, collapse=" ")
+        
+        triPredict <- predictList[[newStr]]
+        nEmpty <- sum(triPredict == "")
+        if(!nEmpty) return(triPredict)
+        triPredict[(4-nEmpty):3] <- biPredict[1:nEmpty]
+        return(triPredict)
+    }
+    print(paste("Finished training trigram predictor: ", language))
+    list(Start = Start, Next = Next)
+}
 
 
