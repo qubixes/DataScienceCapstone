@@ -1,0 +1,234 @@
+---
+title: "Exploration of NLP data for the capstone project"
+author: "qubixes"
+date: "12/8/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r init_data, echo=FALSE}
+# srcDir <- dirname(sys.frame(1)$ofile)
+srcDir <- "."
+dataDir <- file.path(srcDir, "..", "data")
+swiftFile <- file.path(dataDir, "swiftkey.zip")
+
+# This function takes a file name and writes a number of randomly selected lines to another file.
+CreateTrainDevTest <- function (srcFile, dstFiles, nLinesDev, nLinesTest){
+    trainFile <- dstFiles[1]
+    devFile   <- dstFiles[2]
+    testFile  <- dstFiles[3]
+    
+    nLinesIn <- system(paste("wc -l", srcFile), intern = T)
+    nLinesIn <- as.integer(strsplit(nLinesIn, "[ ]{1,}")[[1]][2])
+    
+    devTestLines <- sample(nLinesIn, nLinesDev+nLinesTest)
+    devLines <- devTestLines[1:nLinesDev]
+    testLines <- devTestLines[-(1:nLinesDev)]
+    devLines <- devLines[order(devLines)]
+    testLines <- testLines[order(testLines)]
+
+    conSrc   <- file(srcFile, "r", encoding="UTF-8")
+    conTrain <- file(trainFile, "w")
+    conDev   <- file(devFile, "w")
+    conTest  <- file(testFile, "w")
+
+    curDevChoice=1
+    curTestChoice=1
+    for(i in seq(nLinesIn)){
+        curLine <- readLines(conSrc, 1, skipNul = T)
+        if(curDevChoice <= nLinesDev && i == devLines[curDevChoice]){
+            writeLines(curLine, conDev)
+            curDevChoice <- curDevChoice+1
+        }
+        else if(curTestChoice <= nLinesTest && i == testLines[curTestChoice]){
+            writeLines(curLine, conTest)
+            curTestChoice <- curTestChoice+1
+        }
+        else{
+            writeLines(curLine, conTrain)
+        }
+    }
+    close(conSrc); close(conTrain)
+    close(conDev); close(conTest)
+}
+
+
+# Download the file if it doesn't exist yet.
+if(!file.exists(swiftFile)){
+    download.file("https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip", swiftFile)
+    unzip(swiftFile)
+}
+
+allNewDirs = file.path(dataDir, c("train", "dev", "test"))
+trainDir <- allNewDirs[1]
+devDir   <- allNewDirs[2]
+testDir  <- allNewDirs[3]
+nDevLines <- 40000
+nTestLines <- 10000
+
+if(sum(!dir.exists(allNewDirs))){
+    for(dir in allNewDirs) dir.create(dir, showWarnings = F)
+    
+    set.seed(128371)
+    languages <- dir(file.path(dataDir, "final"))
+    
+    for (language in languages){
+        curSrcDir <- file.path(dataDir, "final", language)
+        curDstDirs <- file.path(allNewDirs, language)
+        for(dir in curDstDirs) dir.create(dir, showWarnings = F)
+        curFiles <- dir(curSrcDir)
+        for (file in curFiles){
+            CreateTrainDevTest(file.path(curSrcDir, file), file.path(curDstDirs, file), nDevLines, nTestLines)
+        }
+    }
+}
+```
+## Introduction
+
+The goal of this project is to predict the next word given previously typed words. This is not a particular novel subject, as evidenced by all the text mining (scientific) literature. It is part of the field of Natural Language Processing (NLP), and it is my personal impression that this is kind of a benchmark problem to test NLP algorithms. There are many ways of predicting words, and the current state of the art algorithms are Neural Networks (NN), or more specifically Recurrent Neural Networks (RNN). Now, the goal of this project is not to build the next state-of-art prediction algorithm; it is simply unfeasible given the time. Instead, we'll look at n-gram models and try to find a decent algorithm with limited resources.
+
+```{r init, echo=TRUE, message=FALSE, warning=FALSE}
+library(tm)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+```
+
+First of all, there is already a significant amount of code, and it is not very helpful to show all of it. There is an invisible code chunk above that downloads the file from the internet, unzips it, and splits it up into three different data sets with a different directory but the same structure. Each of the data sets contains 4 languages (en, de, fi, ru) + 3 text sources (blogs, news, twitter) for each language. 
+
+## Data
+
+The split is as follows: `r as.character(nDevLines)` lines for the dev/validation set, `r as.character(nTestLines)` lines for the test set, and the remaining lines for the remaining for the training set (which is a lot!). Let's look at one of the trianing sets:
+
+```{r wcl}
+system("wc -l ../data/train/en_US/*", intern = TRUE)
+```
+
+So a total of approximately 4 million lines are still left, which should be plenty (or too much) for training purposes. 
+
+## Exploration
+
+For the exploration phase we will use the "tm" package. It provides some helpful tools for text mining in particular. First, let's define a function that takes a text document matrix (*tdm*) and outputs some interesting plots/data. What we're particularly interested in is how often n-grams occur.  
+
+```{r exploration, echo=TRUE}
+ExploreTDM <- function(tdm, gram){
+    #Get frequency matrix
+    textMatrix <- as.matrix(tdm)
+    
+    #Get all of the occurance frequencies, and sort them.
+    freqT <- findFreqTerms(tdm, 30)
+    frequencies <- rowSums(textMatrix, na.rm=TRUE)
+    totCounts <- colSums(textMatrix)
+    freqOrder <- frequencies[order(frequencies, decreasing=TRUE)]/sum(totCounts)
+    cumFreq <- cumsum(freqOrder)
+    
+    # Put the whole thing in a data phrame with several columns (including cumulative occurances), 
+    # and thin them out to save memory.
+    dfCumFreq <- data.frame(fraction=(1:length(cumFreq))/length(cumFreq), occurance=freqOrder, cumFreq=cumFreq, 
+                            gram=gram, rank=1:length(cumFreq))
+    dfSelected <- round(exp(seq(0,log(length(cumFreq)), length=500))) %>% unique
+    dfCumFreq <- dfCumFreq[dfSelected,]
+    rownames(dfCumFreq) <- NULL
+    
+    #Get top 20 most frequent phrases
+    allOrder <- textMatrix[order(frequencies, decreasing=TRUE),]
+    allDf <- data.frame(allOrder)
+    allDf <- mutate(allDf, word=rownames(allDf))
+    rownames(allDf) <- NULL
+    allDf$word <- factor(allDf$word, levels=allDf$word)
+    allDf <- head(allDf, 20)
+    allDf <- gather(allDf, key="file", value="count", -word)
+    allDf <- mutate(allDf, freq = count/totCounts[file])
+    
+    #Make the bar plot of these 20
+    plot_tdm <- ggplot(allDf, aes(x=word, y=freq, fill=file))+geom_bar(stat="identity", 
+                            position=position_dodge()) +theme(axis.text.x=element_text(angle=90, hjust=1))
+    
+    list(plot_tdm, dfCumFreq)
+}
+```
+
+While this piece of code might not be the most enlightning, we can use it with the dev set to get an idea of which words/combinations occur often/less often.
+
+To this effect, we are required to define a tokenizer for bi/trigrams:
+
+```{r bigram_token}
+BigramTokenizer <- function(x){ unlist(lapply(ngrams(words(x), 2), paste, collapse = " "), use.names = FALSE) }
+TrigramTokenizer <- function(x){ unlist(lapply(ngrams(words(x), 3), paste, collapse = " "), use.names = FALSE) }
+```
+
+Let's look at he "en_US" data, since that is the most common language:
+
+```{r us}
+curDir <- file.path(devDir, "en_US")
+```
+
+The following code chunk will load the plots/data frames that will help us analyze. 
+
+```{r cache=TRUE}
+tmData <- VCorpus(DirSource(curDir), readerControl = list(reader = readPlain, language = "en_US", load = TRUE))
+tdm <- TermDocumentMatrix(tmData, list(stemming = FALSE, stopwords = FALSE))
+
+onegram <- ExploreTDM(tdm, 1); rm("tdm")
+
+
+bigram_tdm <- TermDocumentMatrix(tmData, control = list(tokenize = BigramTokenizer))
+bigram <- ExploreTDM(bigram_tdm, 2); rm("bigram_tdm")
+
+trigram_tdm <- TermDocumentMatrix(tmData, control = list(tokenize = TrigramTokenizer))
+trigram <- ExploreTDM(trigram_tdm, 3); rm("trigram_tdm")
+```
+
+Now, let's look at the single word frequencies:
+
+```{r onegram}
+onegram[[1]]
+```
+
+As we can see from this figure, unsurprisingly, "the" is the most common word across the three different sources. Interestingly, there is a big difference in the usage of "you" between the sources: twitter is a more prolific user of the word. 
+
+```{r bigram}
+bigram[[1]]
+```
+
+Evidently, the frequency of bigrams is a lot lower than that of monograms. What is interesting is that the differences between different sources becomes a lot bigger. This could signal an idea for improvement later down the line of classifiying the source and using that information to better predict future words.
+
+```{r trigram}
+trigram[[1]]
+```
+
+The trigram frequency shows that the more sequential words we take into account, the more they differ by source. "Thanks for the" is massively overrepresented by the twitter source for example, while "as well as" is not quite so popular on twitter it seems.
+
+Let's look at the cumulative distribution of the ordered/ranked occurences:
+
+```{r plot_cum}
+allgram_cumFreq <- rbind(onegram[[2]], bigram[[2]], trigram[[2]])
+
+cumFreqPlot <- ggplot(allgram_cumFreq, aes(x=fraction, y=cumFreq, colour=factor(gram)))+geom_line()+scale_x_continuous(trans='log10')
+freqDecreasePlot <- ggplot(allgram_cumFreq, aes(x=rank, y=occurance, colour=factor(gram)))+geom_line()+scale_x_continuous(trans = "log10")+scale_y_continuous(trans="log10")
+cumFreqPlot
+```
+
+We use the log scale for the x-axis to better see what is happening. Keeping this in mind, it is clear that for monograms, it is dominated by a small fraction of words. For 50%, we only need something of the order of 2% of all words (though this is from the dev set, not **all** words, so the actual fraction is even smaller). As expected, for bi- and trigrams, it gets progressively worse: we need a lot of three word combinations to get half to cummulative sum. Thus, using three word combinations is going to be more computationally intensive, but it could potentially return better rewards.
+
+Another look at this is to find the occurance rate as a function of rank. The advantage of this plot is that adding more data/words doesn't do much to the curves in terms of shifting:
+
+```{r plot_dist}
+xes <- round(exp(seq(0,log(1e5), length=500))) %>% unique
+
+regress <- data.frame(rank=xes, x1=0.06*xes^-0.9, x2=0.0045*xes^-0.6, x3=3.4e-4*xes^-0.43)
+
+freqDecreaseWLine <- freqDecreasePlot + geom_line(data=regress, mapping= aes(x=rank, y=x1), colour="red")+ geom_line(data=regress, mapping= aes(x=rank, y=x2), colour="green")+ geom_line(data=regress, mapping= aes(x=rank, y=x3), colour="blue")
+freqDecreaseWLine
+```
+
+We drew some polynomial lines to go with the curves to get an idea of scaling. While polynomial decay (or more likely stretched exponential) is not a good sign in general, because the weight is in the tails, there is some hope in the sense that there is a visible dropoff at ranks that are not too high (<1e5).
+
+## Outlook
+
+I have made made monogram/bigram/trigram standard algorithms to see how much improvement from one to the other there is, but the problem with using the actual training set instead of the dev set as used here is that there are too many trigrams mainly, running out of memory on my machine. My current idea to remedy at the moment is to use a more dynamic scheme, where not every trigram/bigram is stored. There are many many trigrams that have only single or few occurances, and with the available statistics there is little to actually predict from them. However, I do not know any package that would do this for me, so I might have to write it my own (possibly in C++). Of course much more sophisticated algorithms exist or can be made up, using dictionaries/blacklists, etc, but I think it is important to limit the scope of the project as to not cost insane amounts of time. 
+
+For the shiny app, I would probably like to keep it simple. A text input box where the user can type, a selection of language, some prediction buttons. Perhaps add a counter to count the number of good and bad predictions.

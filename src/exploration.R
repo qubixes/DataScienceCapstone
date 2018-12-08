@@ -10,16 +10,26 @@ library(ggplot2)
 
 
 ExploreTDM <- function(tdm, gram){
+    #Get frequency matrix
     textMatrix <- as.matrix(tdm)
     
+    #Get all of the occurance frequencies, and sort them.
     freqT <- findFreqTerms(tdm, 30)
     frequencies <- rowSums(textMatrix, na.rm=TRUE)
     totCounts <- colSums(textMatrix)
     freqOrder <- frequencies[order(frequencies, decreasing=TRUE)]/sum(totCounts)
     cumFreq <- cumsum(freqOrder)
+    
+    #Put the whole thing in a data phrame with several columns (including cumulative occurances), and thin them out to save memory
+    dfCumFreq <- data.frame(fraction=(1:length(cumFreq))/length(cumFreq), occurance=freqOrder, cumFreq=cumFreq, 
+                            gram=gram, rank=1:length(cumFreq))
+    dfSelected <- round(exp(seq(0,log(length(cumFreq)), length=500))) %>% unique
+    dfCumFreq <- dfCumFreq[dfSelected,]
+    rownames(dfCumFreq) <- NULL
+    
+    #Get top 20 most frequent phrases
     allOrder <- textMatrix[order(frequencies, decreasing=TRUE),]
     allDf <- data.frame(allOrder)
-    
     allDf <- mutate(allDf, word=rownames(allDf))
     rownames(allDf) <- NULL
     allDf$word <- factor(allDf$word, levels=allDf$word)
@@ -27,12 +37,10 @@ ExploreTDM <- function(tdm, gram){
     allDf <- gather(allDf, key="file", value="count", -word)
     allDf <- mutate(allDf, freq = count/totCounts[file])
     
+    #Make the bar plot of these 20
     plot_tdm <- ggplot(allDf, aes(x=word, y=freq, fill=file))+geom_bar(stat="identity", position=position_dodge()) + 
         theme(axis.text.x=element_text(angle=90, hjust=1))
-    dfCumFreq <- data.frame(fraction=(1:length(cumFreq))/length(cumFreq), occurance=freqOrder, cumFreq=cumFreq, gram=gram, rank=1:length(cumFreq))
-    dfSelected <- round(exp(seq(0,log(length(cumFreq)), length=500))) %>% unique
-    dfCumFreq <- dfCumFreq[dfSelected,]
-    rownames(dfCumFreq) <- NULL
+    
     list(plot_tdm, dfCumFreq)
 }
 
