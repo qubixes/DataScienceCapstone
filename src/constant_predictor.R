@@ -1,22 +1,13 @@
 srcDir <- dirname(sys.frame(1)$ofile)
 source(file.path(srcDir, "init_data.R"))
 source(file.path(srcDir, "corpus.R"))
-
-
-TrainMonogramPredictor <- function(trainDir, language){
-    tmData <- VCorpus(DirSource(trainDir), readerControl = list(reader = readPlain, language = language, load = TRUE))
-    tdm <- TermDocumentMatrix(tmData)
-    freqTable <- TDM2FrequencyTable(tdm)
-    
-    predictionList <- freqTable[1:3, "phrase"]
-    Start <- function(){predictionList}
-    Next <- function(word){predictionList}
-    list(Start = Start, Next = Next)
-}
+library(tm)
+library(dplyr)
+library(pryr)
 
 CreateNGramTokenizer <- function(n){
     NGramTokenizer <- function(x){ 
-        unlist(lapply(ngrams(words(x), n), paste, collapse = " "), use.names = FALSE) 
+        unlist(lapply(ngrams(words(x), n), paste, collapse = " "), use.names = TRUE) 
     }
     NGramTokenizer
 }
@@ -76,15 +67,38 @@ PredictorListFromTM <- function(mytm){
     list2env(bestList, hash = TRUE)
 }
 
-TrainBigramPredictor <- function(trainDir, language){
-    tmData <- VCorpus(DirSource(trainDir), readerControl = list(reader = readPlain, language = language, load = TRUE))
-    tmData <- RemoveTDMGarbage(tmData)
-    bigram_tdm <- TermDocumentMatrix(tmData, control = list(tokenize = CreateNGramTokenizer(2)))
-    bigramTextMatrix <- as.matrix(bigram_tdm)
+TrainMonogramPredictor <- function(trainDir, language, cleanCorpus = NULL){
+    if(!is.null(ngramPredictors[[trainDir]][[language]][["mono"]])) 
+        return(ngramPredictors[[trainDir]][[language]][["mono"]])
+    if(is.null(cleanCorpus)){
+        cleanCorpus <- VCorpus(DirSource(trainDir), readerControl = list(reader = readPlain, language = language, load = TRUE))
+        cleanCorpus <- RemoveTDMGarbage(cleanCorpus)
+    }
+    tdm <- TermDocumentMatrix(cleanCorpus); rm(cleanCorpus);
+    freqTable <- TDM2FrequencyTable(tdm); rm(tdm);
+    predictionList <- freqTable[1:3, "phrase"]; rm(freqTable);
+
+    Start <- function(){predictionList}
+    Next <- function(word){predictionList}
+
+    ngramPredictors[[trainDir]][[language]][["mono"]] <<- list(Start = Start, Next = Next)
+    list(Start = Start, Next = Next)
+}
+
+TrainBigramPredictor <- function(trainDir, language, cleanCorpus = NULL){
+    if(!is.null(ngramPredictors[[trainDir]][[language]][["bi"]])) 
+        return(ngramPredictors[[trainDir]][[language]][["bi"]])
+    
+    if(is.null(cleanCorpus)){
+        cleanCorpus <- VCorpus(DirSource(trainDir), readerControl = list(reader = readPlain, language = language, load = TRUE))
+        cleanCorpus <- RemoveTDMGarbage(cleanCorpus)
+    }
+    cPredictor <- TrainMonogramPredictor(trainDir, language, cleanCorpus);
+    bigram_tdm <- TermDocumentMatrix(cleanCorpus, control = list(tokenize = CreateNGramTokenizer(2))); rm(cleanCorpus)
+    bigramTextMatrix <- as.matrix(bigram_tdm) ; rm(bigram_tdm)
     bigramTextMatrix <- bigramTextMatrix[rowSums(bigramTextMatrix)>2,]
 
-    predictList <- PredictorListFromTM(bigramTextMatrix)
-    cPredictor <- TrainMonogramPredictor(trainDir, language)
+    predictList <- PredictorListFromTM(bigramTextMatrix); rm(bigramTextMatrix);
     
     
     lastValues=character(1)
@@ -106,22 +120,27 @@ TrainBigramPredictor <- function(trainDir, language){
         return(biPredict)
     }
     print(paste("Finished training bigram predictor: ", language))
+    ngramPredictors[[trainDir]][[language]][["bi"]] <<- list(Start = Start, Next = Next)
     list(Start = Start, Next = Next)
 }
 
 TrainTrigramPredictor <- function(trainDir, language){
-    tmData <- VCorpus(DirSource(trainDir), readerControl = list(reader = readPlain, language = language, load = TRUE))
-    tmData <- RemoveTDMGarbage(tmData)
-    
-    trigram_tdm <- TermDocumentMatrix(tmData, control = list(tokenize = CreateNGramTokenizer(3)))
-    
-    trigramTextMatrix <- as.matrix(trigram_tdm)
+    # if(!is.null(ngramPredictors[[trainDir]][[language]][["tri"]])) 
+        # return(ngramPredictors[[trainDir]][[language]][["tri"]])
+    cleanCorpus <- VCorpus(DirSource(trainDir), readerControl = list(reader = readPlain, language = language, load = TRUE))
+    cleanCorpus <- RemoveTDMGarbage(cleanCorpus); print(mem_used())
+    # biPredictor <- TrainBigramPredictor(trainDir, language, cleanCorpus); 
+    print(mem_used())
+    trigram_tdm <- TermDocumentMatrix(cleanCorpus, control = list(tokenize = CreateNGramTokenizer(3))); rm(cleanCorpus)
+    print(mem_used())
+    return(trigram_tdm)
+    # print(inspect(trigram_tdm))
+    trigramTextMatrix <- as.matrix(trigram_tdm); rm(trigram_tdm);
     trigramTextMatrix <- trigramTextMatrix[rowSums(trigramTextMatrix)>2,]
+    print(mem_used())
     
-    
-    biPredictor <- TrainBigramPredictor(trainDir, language)
-    predictList <- PredictorListFromTM(trigramTextMatrix)
-    
+    predictList <- PredictorListFromTM(trigramTextMatrix); rm(trigramTextMatrix);
+    print(mem_used())
     lastValues=character(2)
     Start <- function(){
         biPredictor$Start()
@@ -131,8 +150,8 @@ TrainTrigramPredictor <- function(trainDir, language){
         biPredict <- biPredictor$Next(cleanWord)
         
         if(cleanWord != ""){
-            lastValues[2] <<- lastValues[1]
-            lastValues[1] <<- cleanWord
+            lastValues[1] <<- lastValues[2]
+            lastValues[2] <<- cleanWord
         }
         newStr <- paste(lastValues, collapse=" ")
         
@@ -142,8 +161,10 @@ TrainTrigramPredictor <- function(trainDir, language){
         triPredict[(4-nEmpty):3] <- biPredict[1:nEmpty]
         return(triPredict)
     }
+    print(mem_used())
     print(paste("Finished training trigram predictor: ", language))
+    ngramPredictors[[trainDir]][[language]][["tri"]] <<- list(Start = Start, Next = Next)
     list(Start = Start, Next = Next)
 }
 
-
+if(!exists("ngramPredictors")) ngramPredictors <- list()

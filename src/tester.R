@@ -85,17 +85,6 @@ PlotResults <- function(results){
 }
 
 
-if(!exists("monogram_results")){
-    monogram_results <- GetPredictorResults(devDir, testDir, TrainMonogramPredictor)
-}
-
-if(!exists("bigram_results")){
-    bigram_results <- GetPredictorResults(devDir, testDir, TrainBigramPredictor)
-}
-
-if(!exists("trigram_results")){
-    trigram_results <- GetPredictorResults(devDir, testDir, TrainTrigramPredictor)
-}
 
 # results <- GetPredictorResults(testDir, CreateConstantPredictor)
 # language <- "de_DE"

@@ -66,7 +66,7 @@ if(sum(!dir.exists(allNewDirs))){
         for(dir in curDstDirs) dir.create(dir, showWarnings = F)
         curFiles <- dir(curSrcDir)
         for (file in curFiles){
-            CreateTrainDevTest(file.path(curSrcDir, file), file.path(curDstDirs, file), 10000, 10000)
+            CreateTrainDevTest(file.path(curSrcDir, file), file.path(curDstDirs, file), 40000, 10000)
         }
     }
 }

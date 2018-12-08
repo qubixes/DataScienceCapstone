@@ -10,8 +10,5 @@ TDM2FrequencyTable <- function(tdm){
     textDf <- mutate(textDf, phrase=rownames(textDf))
     rownames(textDf) <- NULL
     
-    
-    
     textDf
-    
 }
