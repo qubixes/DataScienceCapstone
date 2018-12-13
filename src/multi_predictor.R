@@ -5,7 +5,7 @@ library(dplyr)
 library(Rcpp)
 srcDir <- dirname(sys.frame(1)$ofile)
 source(file.path(srcDir, "init_data.R"))
-
+sourceCpp(file.path(srcDir, "vargram.cpp"))
 
 
 # language <- "en_US"
@@ -23,12 +23,16 @@ PredictorListFromCPL <- function(countPhraseList, ngram){
         return(oPhrase[1:3])
     }
     
+    if(length(phrase) == 0){
+        return(emptyenv())
+    }
+    
     splitPhrase <- strsplit(phrase, ' (?=[^ ]+$)', perl=TRUE) %>% unlist %>% matrix(ncol=2, byrow=T)
     btmDf <- data.frame(count=count, firstTerm  = splitPhrase[,1], secondTerm = splitPhrase[,2])
     btmDfBest <- btmDf %>% group_by(firstTerm) %>% top_n(3,count) 
     allFirst <- unique(as.character(btmDf$firstTerm))
     btmDfBest <- btmDfBest[order(as.character(btmDfBest$firstTerm)),]
-    bestList <- vector("list", length = length(allFirst))
+    bestList <- vector("list", length = length(allFirst)*1.1)
     
     bestList <- mapply(function(x){ x=character(3)}, bestList, SIMPLIFY = F)
     nSame=0
@@ -50,21 +54,31 @@ PredictorListFromCPL <- function(countPhraseList, ngram){
     list2env(bestList, hash = TRUE)
 }
 
-TrainMultigramPredictor <- function(trainDir, language, parameters){
+GetTokens <- function(trainDir, language){
+    myCorpus <- Corpus(DirSource(trainDir), readerControl = list(reader = readPlain, language = language, load = TRUE))
+    myTokens <- corpus(myCorpus) %>% tokens(what="word", remove_punct=T, remove_symbols=T, remove_hyphens=T) %>% tolower
+    rm("myCorpus")
+    myTokens
+}
+
+# GetTokens2 <- function()
+
+TrainMultigramPredictor <- function(trainDir, language, parameters, myTokens=NULL){
     threshold <- parameters[["threshold"]]
     maxNGram <- parameters[["maxNGram"]]
+    maxTokens <- parameters[["maxTokens"]]
     
     if(is.null(threshold) || is.null(maxNGram)){
         print("Error creating predictor: parameters not supplied")
         return (NULL)
     }
     
-    myCorpus <- Corpus(DirSource(trainDir), readerControl = list(reader = readPlain, language = language, load = TRUE))
-    myTokens <- corpus(myCorpus) %>% tokens(what="word", remove_punct=T, remove_symbols=T, remove_hyphens=T) %>% tolower
-    myList <- GetMultigram(tokenList, threshold, maxNGram)
-    
-    rm("myTokens"); rm("myCorpus")
-    
+    if(is.null(myTokens)) myTokens <- GetTokens(trainDir, language)
+    if(!is.null(maxTokens) && maxTokens < length(myTokens)) myTokens = myTokens[1:maxTokens]
+    myList <- GetMultigram(myTokens, threshold, maxNGram)
+
+    rm("myTokens"); 
+
     predictorList = list()
     for(i in 1:maxNGram)
         predictorList[[i]] = PredictorListFromCPL(myList[[i]], i)
@@ -74,14 +88,19 @@ TrainMultigramPredictor <- function(trainDir, language, parameters){
     
     Start <- function(){predictorList[[1]]}
     Next <- function(word){
-        cleanWord <- word %>% tokens(what="word", remove_punct=T, remove_symbols=T, remove_hyphens=T) %>% tolower
+        cleanWord <- word %>% tokens(what="fastestword", remove_punct=T, remove_symbols=T, remove_hyphens=T) %>% tolower
         if(sum(cleanWord != "") != 0){
             nWord <- length(cleanWord)
-            # print(paste("move  = [", nWord+1,",",maxNGram-1,"]"))
-            # print(paste("to = ", 1, (maxNGram-1-nWord)))
-            # print(lastValues)
-            lastValues[1:(maxNGram-1-nWord)] <<- lastValues[(nWord+1):(maxNGram-1)]
-            lastValues[(maxNGram-nWord):(maxNGram-1)] <<- cleanWord
+            i=1
+            while(i<=maxNGram-1-nWord){
+                lastValues[i] <<- lastValues[i+nWord]
+                i = i+1;
+            }
+            i=max(c(maxNGram-nWord,1))
+            while(i<=maxNGram-1){
+                lastValues[i] <<- cleanWord[nWord+(i-maxNGram+1)]
+                i=i+1;
+            }
         }
         nPredict=0; iGram=maxNGram;
         prediction = character(3)
@@ -90,15 +109,12 @@ TrainMultigramPredictor <- function(trainDir, language, parameters){
                 newPrediction = predictorList[[1]]
             else{
                 myStr <- paste(lastValues[(maxNGram-iGram+1):(maxNGram-1)], collapse = " ")
-                # print(myStr)
-                # print(lastValues)
-                # print(paste((maxNGram-iGram+1),(maxNGram-1)))
                 newPrediction = predictorList[[iGram]][[myStr]]
             }
             if(!is.null(newPrediction)){
                 nEmpty = sum(newPrediction == "")
                 for(i in 1:(3-nEmpty)){
-                    if(!(newPrediction[i] %in% prediction)){
+                    if(!(any(newPrediction[i] == prediction))){
                         prediction[nPredict+1] = newPrediction[i]
                         nPredict = nPredict+1
                     }
@@ -113,10 +129,13 @@ TrainMultigramPredictor <- function(trainDir, language, parameters){
     list(Start = Start, Next = Next)
 }
 
+GetStatsPredictor <- function(predictor){
+        predList <- get("predictorList", environment(predictor$Start))
+        nElem <- integer(length(predList))
+        for( i in seq(length(predList))){
+            nElem[i] <- length(predList[[i]]) 
+        }
+        nElem
+}
 
-if(!exists("ngramPredictors")) ngramPredictors <- list()
-myPred <- TrainMultigramPredictor(myDir, "en_US", parameters)
-myPred$Start() %>% print
-myPred$Next("We") %>% print
-myPred$Next("are") %>% print
-myPred$Next("going") %>% print
+

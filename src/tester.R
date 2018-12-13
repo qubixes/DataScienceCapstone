@@ -1,4 +1,7 @@
 srcDir <- dirname(sys.frame(1)$ofile)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
 source(file.path(srcDir, "init_data.R"))
 source(file.path(srcDir, "corpus.R"))
 source(file.path(srcDir, "constant_predictor.R"))
@@ -47,7 +50,7 @@ Tester <- function(testDir, predictor){
     fracCorrect = nCorrect/nTested
     score = mean(fracCorrect)
     tEnd <- Sys.time()
-    list(c(score=100*score, ms_per_predict=1000*as.numeric(tEnd-tStart)/sum(nTested)), perc_correct=100*fracCorrect)
+    list(c(score=100*score, ms_per_predict=1000*as.numeric(difftime(tEnd, tStart, units="secs"))/sum(nTested)), perc_correct=100*fracCorrect, nTested=nTested)
 }
 
 StraightenResults <- function(results, n){
@@ -65,11 +68,15 @@ StraightenResults <- function(results, n){
     matr
 }
 
-GetPredictorResults <- function(trainDir, testDir, makePredictor){
+GetPredictorResults <- function(trainDir, testDir, makePredictor, hyperParameters=NULL){
     languages <- dir(testDir)
     allTrainDirs <- file.path(trainDir, languages)
     allTestDirs <- file.path(testDir, languages)
-    predictors <- mapply(makePredictor, allTrainDirs, languages, SIMPLIFY = F)
+    if(is.null(hyperParameters))
+        predictors <- mapply(makePredictor, allTrainDirs, languages, SIMPLIFY = F)
+    else
+        predictors <- mapply(makePredictor, allTrainDirs, languages, MoreArgs = list(parameters), SIMPLIFY = F)
+    
     results <- mapply(Tester, allTestDirs, predictors, SIMPLIFY = F)
     results <- StraightenResults(results, length(languages))
     colnames(results) <- gsub(".txt$", "", colnames(results))
