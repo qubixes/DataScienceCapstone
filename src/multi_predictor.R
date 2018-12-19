@@ -20,6 +20,7 @@ PredictorListFromCPL <- function(countPhraseList, ngram){
     phrase = countPhraseList[["phrase"]]
     if(ngram == 1){
         oPhrase  = phrase[order(count, decreasing = T)]
+        oPhrase <- oPhrase[oPhrase != "-dot-"]
         return(oPhrase[1:3])
     }
     
@@ -27,8 +28,14 @@ PredictorListFromCPL <- function(countPhraseList, ngram){
         return(emptyenv())
     }
     
-    splitPhrase <- strsplit(phrase, ' (?=[^ ]+$)', perl=TRUE) %>% unlist %>% matrix(ncol=2, byrow=T)
-    btmDf <- data.frame(count=count, firstTerm  = splitPhrase[,1], secondTerm = splitPhrase[,2])
+    splitPhrase <- strsplit(phrase, ' (?=[^ ]+$)', perl=TRUE)
+    goodSplits <- (sapply(splitPhrase, length) == 2)
+    count <- count[ goodSplits ] 
+    splitPhrase <- splitPhrase[ goodSplits ] %>% unlist
+    
+    firstTerm <- splitPhrase[seq(1, length(splitPhrase), 2)]; secondTerm <- splitPhrase[seq(2, length(splitPhrase), 2)]
+    firstTerm <- firstTerm[secondTerm!="-dot-"]; count <- count[secondTerm!="-dot-"]; secondTerm <- secondTerm[secondTerm!="-dot-"]; 
+    btmDf <- data.frame(count=count, firstTerm  = firstTerm, secondTerm = secondTerm)
     btmDfBest <- btmDf %>% group_by(firstTerm) %>% top_n(3,count) 
     allFirst <- unique(as.character(btmDf$firstTerm))
     btmDfBest <- btmDfBest[order(as.character(btmDfBest$firstTerm)),]
@@ -61,20 +68,41 @@ GetTokens <- function(trainDir, language){
     myTokens
 }
 
-# GetTokens2 <- function()
+GetTokens2 <- function(trainDir, language){
+    myCorpus <- Corpus(DirSource(trainDir), readerControl = list(reader = readPlain, language = language, load = TRUE))
+    myTokens <- corpus(myCorpus) %>% tokens(what="word", remove_punct=F, remove_symbols=T, remove_hyphens=T) %>% tokens_replace(pattern= ".", replacement = "-dot-") %>% tokens(what="fastestword", remove_punct=T) %>% tolower
+    # myTokens <- gsub("\.+", "xspecialx_dot", myTokens) %>% 
+    rm("myCorpus")
+    myTokens
+}
 
-TrainMultigramPredictor <- function(trainDir, language, parameters, myTokens=NULL){
+TokenTransformer2 <- function(words){
+    words %>% tokens(what="fastestword", remove_punct=F, remove_symbols=T, remove_hyphens=T) %>% tokens_replace(pattern= ".", replacement = "-dot-") %>% tokens(what="fastestword", remove_punct=T) %>% tolower
+}
+
+TokenTransformer <- function(words){
+    words %>% tokens(what="fastestword", remove_punct=T, remove_symbols=T, remove_hyphens=T) %>% tolower
+}
+
+TrainMultigramPredictor <- function(trainDir, parameters, myTokens=NULL){
     threshold <- parameters[["threshold"]]
     maxNGram <- parameters[["maxNGram"]]
     maxTokens <- parameters[["maxTokens"]]
+    minOccurence <- parameters[["minOccurence"]]
+    language <- parameters[["language"]]
     
     if(is.null(threshold) || is.null(maxNGram)){
         print("Error creating predictor: parameters not supplied")
         return (NULL)
     }
     
-    if(is.null(myTokens)) myTokens <- GetTokens(trainDir, language)
+    if(is.null(myTokens)) myTokens <- GetTokens2(trainDir, language)
     if(!is.null(maxTokens) && maxTokens < length(myTokens)) myTokens = myTokens[1:maxTokens]
+    
+    if(!is.null(minOccurence)){
+        if(threshold*length(myTokens) < minOccurence)
+            threshold <- (minOccurence+0.1)/length(myTokens)
+    }
     myList <- GetMultigram(myTokens, threshold, maxNGram)
 
     rm("myTokens"); 
@@ -86,9 +114,8 @@ TrainMultigramPredictor <- function(trainDir, language, parameters, myTokens=NUL
     rm("myList")
     lastValues = character(maxNGram-1)
     
-    Start <- function(){predictorList[[1]]}
     Next <- function(word){
-        cleanWord <- word %>% tokens(what="fastestword", remove_punct=T, remove_symbols=T, remove_hyphens=T) %>% tolower
+        cleanWord <- TokenTransformer2(word)
         if(sum(cleanWord != "") != 0){
             nWord <- length(cleanWord)
             i=1
@@ -126,6 +153,13 @@ TrainMultigramPredictor <- function(trainDir, language, parameters, myTokens=NUL
         }
         prediction[1:3]
     }
+    
+    Start <- function(){
+        lastValues <<- character(maxNGram-1)
+        Next(".")
+        # predictorList[[1]]
+    }
+    print(paste("Finished training language:", language))
     list(Start = Start, Next = Next)
 }
 
