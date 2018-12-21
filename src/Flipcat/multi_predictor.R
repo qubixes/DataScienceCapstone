@@ -17,14 +17,12 @@ sourceCpp("vargram.cpp")
 # tokenList <- myTokens
 
 
-dotRepresentation <- "xxxdotxxx"
-
 PredictorListFromCPL <- function(countPhraseList, ngram){
     count = countPhraseList[["count"]]
     phrase = countPhraseList[["phrase"]]
     if(ngram == 1){
         oPhrase  = phrase[order(count, decreasing = T)]
-        oPhrase <- oPhrase[oPhrase != dotRepresentation]
+        oPhrase <- oPhrase[oPhrase != "-dot-"]
         return(oPhrase[1:3])
     }
     
@@ -38,7 +36,7 @@ PredictorListFromCPL <- function(countPhraseList, ngram){
     splitPhrase <- splitPhrase[ goodSplits ] %>% unlist
     
     firstTerm <- splitPhrase[seq(1, length(splitPhrase), 2)]; secondTerm <- splitPhrase[seq(2, length(splitPhrase), 2)]
-    firstTerm <- firstTerm[secondTerm!=dotRepresentation]; count <- count[secondTerm!=dotRepresentation]; secondTerm <- secondTerm[secondTerm!=dotRepresentation]; 
+    firstTerm <- firstTerm[secondTerm!="-dot-"]; count <- count[secondTerm!="-dot-"]; secondTerm <- secondTerm[secondTerm!="-dot-"]; 
     btmDf <- data.frame(count=count, firstTerm  = firstTerm, secondTerm = secondTerm)
     btmDfBest <- btmDf %>% group_by(firstTerm) %>% top_n(3,count) 
     allFirst <- unique(as.character(btmDf$firstTerm))
@@ -74,22 +72,14 @@ GetTokens <- function(trainDir, language){
 
 GetTokens2 <- function(trainDir, language){
     myCorpus <- Corpus(DirSource(trainDir), readerControl = list(reader = readPlain, language = language, load = TRUE))
-    myTokens <- corpus(myCorpus) %>% tokens(what="word", remove_punct=F, remove_symbols=T, remove_hyphens=T) %>% tokens_replace(pattern= ".", replacement = dotRepresentation) %>% tokens(what="fastestword", remove_punct=T) %>% tolower
+    myTokens <- corpus(myCorpus) %>% tokens(what="word", remove_punct=F, remove_symbols=T, remove_hyphens=T) %>% tokens_replace(pattern= ".", replacement = "-dot-") %>% tokens(what="fastestword", remove_punct=T) %>% tolower
     # myTokens <- gsub("\.+", "xspecialx_dot", myTokens) %>% 
     rm("myCorpus")
     myTokens
 }
 
 TokenTransformer2 <- function(words){
-    words %>% tokens(what="fastestword", remove_punct=F, remove_symbols=T, remove_hyphens=T) %>% tokens_replace(pattern= ".", replacement = dotRepresentation) %>% tokens(what="fastestword", remove_punct=T) %>% tolower
-}
-
-TokenTransformer3 <- function(words){
-    gsub('[.]', paste0(" ", dotRepresentation, " "), words) %>% tokens(what="word", remove_punct=T, remove_symbols=T, remove_hyphens=T) %>% tolower
-}
-
-TokenTransformer4 <- function(words){
-    gsub('[.]', paste0(" ", dotRepresentation, " "), words) %>% tokens(what="fastestword", remove_punct=T, remove_symbols=T, remove_hyphens=T) %>% tolower
+    words %>% tokens(what="fastestword", remove_punct=F, remove_symbols=T, remove_hyphens=T) %>% tokens_replace(pattern= ".", replacement = "-dot-") %>% tokens(what="fastestword", remove_punct=T) %>% tolower
 }
 
 TokenTransformer <- function(words){
@@ -127,7 +117,7 @@ TrainMultigramPredictor <- function(trainDir, parameters, myTokens=NULL){
     lastValues = character(maxNGram-1)
     
     Next <- function(word){
-        cleanWord <- TokenTransformer4(word)
+        cleanWord <- TokenTransformer2(word)
         if(sum(cleanWord != "") != 0){
             nWord <- length(cleanWord)
             i=1

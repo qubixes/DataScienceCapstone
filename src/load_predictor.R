@@ -13,7 +13,7 @@ ParametersToFilename <- function(parameters){
     filename
 }
 
-parameters <- list(threshold=1e-7, maxNGram=5, minOccurence=3, language="en_US", trainDir="train")
+parameters <- list(threshold=1e-6, maxNGram=5, minOccurence=3, language="en_US", trainDir="train")
 
 if(parameters[["trainDir"]] == "dev"){
     baseTrainDir <- devDir
@@ -41,17 +41,17 @@ for(lang in allLang){
     myTestDir <- file.path(baseTestDir, lang)
     predFile <- file.path(predictDir, paste0(fileBase, ".rds"))
     if(file.exists(predFile)){
-        myPred <- readRDS(predFile)
+        predictors[[lang]] <- readRDS(predFile)
     } else{
-        myPred <- TrainMultigramPredictor(trainDir = myTrainDir, parameters = parameters)
-        saveRDS(myPred, file = predFile)
+        predictors[[lang]] <- TrainMultigramPredictor(trainDir = myTrainDir, parameters = parameters)
+        saveRDS(predictors[[lang]], file = predFile)
     }
-    predictors[[lang]] <- myPred
+    # predictors[[lang]] <- myPred
     resFile <- file.path(predictDir, paste0(fileBase, ".dat"))
     if(file.exists(resFile)){
         myRes <- readRDS(resFile)
     } else {
-        myRes <- Tester(myTestDir, myPred)
+        myRes <- Tester(myTestDir, predictors[[lang]])
         saveRDS(myRes, file = resFile)
     }
     allResults[[lang]] = myRes
