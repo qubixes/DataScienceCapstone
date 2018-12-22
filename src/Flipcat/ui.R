@@ -8,6 +8,7 @@
 #
 
 library(shiny)
+library(shinyjs)
 
 # js <- '
 # $(document).on("keydown": function(e) {
@@ -49,8 +50,9 @@ $(document).on("keypress", function(e){
 # Define UI for application that draws a histogram
 shinyUI(fluidPage(
   # tags$script(js1),
-  tags$script(js2),
+  # tags$script(js2),
   # Application title
+  useShinyjs(),
   titlePanel("FlipCat"),
   p("A demo for fast n-gram prediction."),
   # Sidebar with a slider input for number of bins 
@@ -64,13 +66,18 @@ shinyUI(fluidPage(
        actionButton("choice1", label="-", width="32%"),
        actionButton("choice2", label="-", width="32%"),
        actionButton("choice3", label="-", width="32%"), 
-       selectInput("language", label="language", choices=c("German", "English", "Finnish", "Russian"), selected="English")
+       selectInput("language", label="Language", choices=c("German", "English", "Finnish", "Russian"), selected="English"),
+       selectInput("mem_usage", label="Memory usage", choices=c("lowest ()", "low ()", "high ()", "highest ()"), selected="smaller"),
+       checkboxInput("tokenize", label="Fast tokenizer", value=T)
     ),
     
     # Show a plot of the generated distribution
     mainPanel(
        plotOutput("testText"),
-       actionButton("recalcButton", label="refresh", width="25%")
+       flowLayout(
+       checkboxInput("test_all_models", label="All models", value=F),
+       actionButton("recalcButton", label="Refresh", width="80%", style="color: #fff; background-color: #0000ff")
+       )
     )
   )
 ))

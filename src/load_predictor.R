@@ -34,29 +34,32 @@ if(!dir.exists(predictDir))
 
 allResults <- list()
 predictors <- list()
-for(lang in allLang){
-    parameters[["language"]] = lang
-    fileBase <- ParametersToFilename(parameters = parameters)
-    myTrainDir <- file.path(baseTrainDir, lang)
-    myTestDir <- file.path(baseTestDir, lang)
-    predFile <- file.path(predictDir, paste0(fileBase, ".rds"))
-    if(file.exists(predFile)){
-        predictors[[lang]] <- readRDS(predFile)
-    } else{
-        predictors[[lang]] <- TrainMultigramPredictor(trainDir = myTrainDir, parameters = parameters)
-        saveRDS(predictors[[lang]], file = predFile)
+myThresholds = c(3e-6, 1e-6, 3e-7, 1e-7)
+for(thres in myThresholds){
+    parameters[["threshold"]] = thres
+    for(lang in allLang){
+        parameters[["language"]] = lang
+        fileBase <- ParametersToFilename(parameters = parameters)
+        myTrainDir <- file.path(baseTrainDir, lang)
+        myTestDir <- file.path(baseTestDir, lang)
+        predFile <- file.path(predictDir, paste0(fileBase, ".rds"))
+        if(file.exists(predFile)){
+            predictors[[lang]] <- readRDS(predFile)
+        } else{
+            predictors[[lang]] <- TrainNGramPredictorList(trainDir = myTrainDir, parameters = parameters)
+            saveRDS(predictors[[lang]], file = predFile)
+        }
+        # predictors[[lang]] <- myPred
+        # resFile <- file.path(predictDir, paste0(fileBase, ".dat"))
+        # if(file.exists(resFile)){
+        #     myRes <- readRDS(resFile)
+        # } else {
+        #     myRes <- Tester(myTestDir, predictors[[lang]])
+        #     saveRDS(myRes, file = resFile)
+        # }
+        # allResults[[lang]] = myRes
     }
-    # predictors[[lang]] <- myPred
-    resFile <- file.path(predictDir, paste0(fileBase, ".dat"))
-    if(file.exists(resFile)){
-        myRes <- readRDS(resFile)
-    } else {
-        myRes <- Tester(myTestDir, predictors[[lang]])
-        saveRDS(myRes, file = resFile)
-    }
-    allResults[[lang]] = myRes
 }
-
-newRes <- cbind(data.frame(StraightenResults(allResults, 4)), language = allLang)
-resPlot <- PlotResults(newRes)
-print(resPlot)
+# newRes <- cbind(data.frame(StraightenResults(allResults, 4)), language = allLang)
+# resPlot <- PlotResults(newRes)
+# print(resPlot)

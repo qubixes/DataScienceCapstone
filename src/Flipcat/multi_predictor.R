@@ -10,19 +10,14 @@ library(Rcpp)
 sourceCpp("vargram.cpp")
 
 
-# language <- "en_US"
-# myDir <- file.path(testDir, language)
-# myCorpus <- Corpus(DirSource(myDir), readerControl = list(reader = readPlain, language = language, load = TRUE))
-# myTokens <- corpus(myCorpus) %>% tokens(what="word", remove_punct=T, remove_symbols=T, remove_hyphens=T) %>% tolower
-# tokenList <- myTokens
-
+dotRepresentation <- "xxxdotxxx"
 
 PredictorListFromCPL <- function(countPhraseList, ngram){
     count = countPhraseList[["count"]]
     phrase = countPhraseList[["phrase"]]
     if(ngram == 1){
         oPhrase  = phrase[order(count, decreasing = T)]
-        oPhrase <- oPhrase[oPhrase != "-dot-"]
+        oPhrase <- oPhrase[oPhrase != dotRepresentation]
         return(oPhrase[1:3])
     }
     
@@ -36,7 +31,7 @@ PredictorListFromCPL <- function(countPhraseList, ngram){
     splitPhrase <- splitPhrase[ goodSplits ] %>% unlist
     
     firstTerm <- splitPhrase[seq(1, length(splitPhrase), 2)]; secondTerm <- splitPhrase[seq(2, length(splitPhrase), 2)]
-    firstTerm <- firstTerm[secondTerm!="-dot-"]; count <- count[secondTerm!="-dot-"]; secondTerm <- secondTerm[secondTerm!="-dot-"]; 
+    firstTerm <- firstTerm[secondTerm!=dotRepresentation]; count <- count[secondTerm!=dotRepresentation]; secondTerm <- secondTerm[secondTerm!=dotRepresentation]; 
     btmDf <- data.frame(count=count, firstTerm  = firstTerm, secondTerm = secondTerm)
     btmDfBest <- btmDf %>% group_by(firstTerm) %>% top_n(3,count) 
     allFirst <- unique(as.character(btmDf$firstTerm))
@@ -72,21 +67,15 @@ GetTokens <- function(trainDir, language){
 
 GetTokens2 <- function(trainDir, language){
     myCorpus <- Corpus(DirSource(trainDir), readerControl = list(reader = readPlain, language = language, load = TRUE))
-    myTokens <- corpus(myCorpus) %>% tokens(what="word", remove_punct=F, remove_symbols=T, remove_hyphens=T) %>% tokens_replace(pattern= ".", replacement = "-dot-") %>% tokens(what="fastestword", remove_punct=T) %>% tolower
+    myTokens <- corpus(myCorpus) %>% tokens(what="word", remove_punct=F, remove_symbols=T, remove_hyphens=T) %>% tokens_replace(pattern= ".", replacement = dotRepresentation) %>% tokens(what="fastestword", remove_punct=T) %>% tolower
     # myTokens <- gsub("\.+", "xspecialx_dot", myTokens) %>% 
     rm("myCorpus")
     myTokens
 }
 
-TokenTransformer2 <- function(words){
-    words %>% tokens(what="fastestword", remove_punct=F, remove_symbols=T, remove_hyphens=T) %>% tokens_replace(pattern= ".", replacement = "-dot-") %>% tokens(what="fastestword", remove_punct=T) %>% tolower
-}
 
-TokenTransformer <- function(words){
-    words %>% tokens(what="fastestword", remove_punct=T, remove_symbols=T, remove_hyphens=T) %>% tolower
-}
 
-TrainMultigramPredictor <- function(trainDir, parameters, myTokens=NULL){
+TrainNGramPredictorList <- function(trainDir, parameters, myTokens=NULL){
     threshold <- parameters[["threshold"]]
     maxNGram <- parameters[["maxNGram"]]
     maxTokens <- parameters[["maxTokens"]]
@@ -106,19 +95,74 @@ TrainMultigramPredictor <- function(trainDir, parameters, myTokens=NULL){
             threshold <- (minOccurence+0.1)/length(myTokens)
     }
     myList <- GetMultigram(myTokens, threshold, maxNGram)
-
+    
     rm("myTokens"); 
-
+    
     predictorList = list()
     for(i in 1:maxNGram)
         predictorList[[i]] = PredictorListFromCPL(myList[[i]], i)
+    print(paste("Finished training language:", language))
+    predictorList
+}
+
+
+TokenizeFaster <- function(words){
+    gsub('[.]', paste0(" ", dotRepresentation, " "), words) %>% tokens(what="fastestword", remove_punct=T, remove_symbols=T, remove_hyphens=T) %>% tolower
+}
+
+TokenizeFastest <- function(words){
+    words %>% tokens(what="fastestword", remove_punct=T, remove_symbols=T, remove_hyphens=T) %>% tolower
+}
+
+TokenizeSlower <- function(words){
+    words %>% tokens(what="fastestword", remove_punct=F, remove_symbols=T, remove_hyphens=T) %>% tokens_replace(pattern= ".", replacement = dotRepresentation) %>% tokens(what="fastestword", remove_punct=T) %>% tolower
+}
+
+
+NewNGramPredictor <- function(newPredList = NULL, tokenizer = "slow"){
     
-    rm("myList")
-    lastValues = character(maxNGram-1)
+    TokenizeSlow <- function(words){
+        gsub('[.]', paste0(" ", dotRepresentation, " "), words) %>% tokens(what="word", remove_punct=T, remove_symbols=T, remove_hyphens=T) %>% tolower
+    }
+
+    TokenizeFast <- function(words){
+        gsub('[.]', paste0(" ", dotRepresentation, " "), words) %>% tokens(what="fastestword", remove_punct=T, remove_symbols=T, remove_hyphens=T) %>% tolower %>% removePunctuation
+    }    
+    
+    predictorList <- NULL
+    maxNGram <- integer(1)
+    
+    InitPredList <- function(newList){
+        if(!is.null(newList)){
+            predictorList <<- newList
+            maxNGram <<- length(predictorList)
+        } else {
+            predictorList <<- NULL
+            maxNGram <<- 1
+        }
+        
+    }
+    
+    SetTokenizer <- function(newTokenizer="slow"){
+        if(newTokenizer == "fast"){ 
+            myTokenizer <<- TokenizeFast
+         } else {
+            myTokenizer <<- TokenizeSlow
+        }
+    }
+    
+    Start <- function(){
+        if(maxNGram <= 0){
+            print("Error: didn't load prediction data.")
+        }
+        lastValues <<- character(maxNGram-1)
+        Next(".")
+    }
     
     Next <- function(word){
-        cleanWord <- TokenTransformer2(word)
+        cleanWord <- myTokenizer(word)
         if(sum(cleanWord != "") != 0){
+            cleanWord <- cleanWord[cleanWord != ""]
             nWord <- length(cleanWord)
             i=1
             while(i<=maxNGram-1-nWord){
@@ -156,13 +200,12 @@ TrainMultigramPredictor <- function(trainDir, parameters, myTokens=NULL){
         prediction[1:3]
     }
     
-    Start <- function(){
-        lastValues <<- character(maxNGram-1)
-        Next(".")
-        # predictorList[[1]]
-    }
-    print(paste("Finished training language:", language))
-    list(Start = Start, Next = Next)
+    SetTokenizer(tokenizer)
+    InitPredList(newPredList)
+    
+    lastValues <- character(maxNGram-1)
+    
+    list(Start = Start, Next = Next, SetTokenizer = SetTokenizer, InitPredList = InitPredList)
 }
 
 GetStatsPredictor <- function(predictor){
