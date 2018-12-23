@@ -16,7 +16,12 @@ parameters <- list(threshold=1e-6, maxNGram=5, minOccurence=3, language="en_US",
 
 # All different options for language and thresholds.
 allLang <- c(German = "de_DE", English = "en_US", Finnish = "fi_FI", Russian = "ru_RU")
-allThresholds <- c(lowest=3e-6, low=1e-6, high=3e-7, highest=1e-7)
+nThres <- 3
+allThresholds <- c(lowest=3e-6, low=1e-6, medium=5e-7, high=3e-7, highest=1e-7)
+memFormat <- c("27 MiB", "100 MiB", "241 MiB", "474 MiB", "1931 MiB")
+
+allThresholds <- allThresholds[1:nThres]
+memFormat <- memFormat[1:nThres]
 predictDir <- "predict"
 
 # Only load the prediction databases a single time. Saves a lot of testing time.

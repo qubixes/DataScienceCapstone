@@ -7,7 +7,8 @@ library(shinyjs)
 # Define UI for application that draws a histogram
 shinyUI(fluidPage(
   titlePanel("CatFlip"),
-  p("This application is a demo to show the natural language processing capabilities of the underlying algorithm. The algorithm is based on an n-gram model (shown here with n=5), to predict the following word: given the n-1 words, find the n-gram with the highest occurance rate. If this does not exist, lower n by one until a prediction is made."),
+  p("This application is a demo to show the natural language processing capabilities of the underlying algorithm. The algorithm is based on an n-gram model (shown here with n=5), to predict the following word: given the n-1 words, find the n-gram with the highest occurence rate. If this does not exist, lower n by one until a prediction is made."),
+  p("If the buttons below the text are showing hyphens, please wait a minute before everything is loaded."),
   sidebarLayout(
     sidebarPanel(
        textAreaInput("curText", label="", cols=80, rows=10, placeholder = "Start typing text here"),
@@ -15,7 +16,7 @@ shinyUI(fluidPage(
        actionButton("choice2", label="-", width="32%"),
        actionButton("choice3", label="-", width="32%"), 
        selectInput("language", label="Language", choices=c("German", "English", "Finnish", "Russian"), selected="English"),
-       selectInput("mem_usage", label="Memory usage", choices=c("lowest ()", "low ()", "high ()", "highest ()"), selected="smaller"),
+       selectInput("mem_usage", label="Memory usage", choices=c("lowest ()", "low ()", "high ()", "highest ()"), selected="highest"),
        checkboxInput("tokenize", label="Fast tokenizer", value=T)
     ),
     

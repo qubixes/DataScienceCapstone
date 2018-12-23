@@ -6,13 +6,13 @@ library(shiny)
 library(ggplot2)
 library(data.table)
 
-source("multi_predictor.R")
+source("shiny_multi_predictor.R")
 source("shiny_load.R")
 source("shiny_tester.R")
 
 
 shinyServer(function(input, output, session) {
-    memSizeChoices <- paste0(names(allThresholds), " (", memFormat, ")")
+    memSizeChoices <- paste0(names(allThresholds), " (", memFormat[1:length(allThresholds)], ")")
     updateSelectInput(session, "mem_usage", label="memory usage", choices = memSizeChoices, selected = memSizeChoices[length(memSizeChoices)])
     
     #This is the predictor we'll be using most of the time. 
@@ -102,7 +102,7 @@ shinyServer(function(input, output, session) {
                 nameV <- character(0)
                 
                 #Create a long (tidy) vector from the test results of the different models.
-                for(iPred in 1:length(predictors[[curLang]])){
+                for(iPred in 1:length(allThresholds)){
                     newPred$InitPredList(predictors[[curLang]][[iPred]])
                     fracCorrect <- TextTester(curText, newPred)
                     choiceV <- c(choiceV, pChoice);

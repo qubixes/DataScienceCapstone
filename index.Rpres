@@ -7,7 +7,7 @@ autosize: true
 Introduction
 ========================================================
 
-The application *CatFlip* is a word prediction algorithm; given a some chunk of text, predict the next word. We use *n*-grams; frequencies of *n* consecutive words to predict the next word.
+The application *CatFlip* ([link](https://qubixes.shinyapps.io/CatFlip/)) is a word prediction algorithm; given a some chunk of text, predict the next word. We use *n*-grams; frequencies of *n* consecutive words to predict the next word.
 
 Features of *CatFlip*:
 

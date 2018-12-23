@@ -34,7 +34,7 @@ if(!dir.exists(predictDir))
 
 allResults <- list()
 predictors <- list()
-myThresholds = c(3e-6, 1e-6, 3e-7, 1e-7)
+myThresholds = c(3e-6, 1e-6, 5e-7, 3e-7, 1e-7)
 for(thres in myThresholds){
     parameters[["threshold"]] = thres
     for(lang in allLang){
