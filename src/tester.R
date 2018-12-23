@@ -29,7 +29,7 @@ Tester <- function(testDir, predictor){
         con <- file(file.path(testDir, curFile), "r")
         
         curIt=0
-        while(length(curLine <- readLines(con, 1, skipNul = T))>0 && curIt<100){
+        while(length(curLine <- readLines(con, 1, skipNul = T))>0 && curIt<200){
             lineIn <- SplitLine(curLine)
             lineInClean <- tolower(sapply(lineIn, removePunctuation))
             
@@ -85,9 +85,12 @@ GetPredictorResults <- function(trainDir, testDir, makePredictor, hyperParameter
 }
 
 PlotResults <- function(results){
-    small_results <- gather(results, key=source, val=indiv_score, blogs, news, twitter, score)
+    small_results <- results
+    small_results$language <- rownames(small_results)
+    print(small_results)
+    small_results <- gather(small_results, key=source, val=indiv_score, blogs, news, twitter, -score)
     plot_tdm <- ggplot(small_results, aes(x=language, y=indiv_score, fill=source))+
-        geom_bar(stat="identity", position=position_dodge()) + theme(axis.text.x=element_text(angle=90, hjust=1))
+        geom_bar(stat="identity", position=position_dodge()) + theme(axis.text.x=element_text(angle=90, hjust=1)) + ylab("% correct top 3 prediction")
     plot_tdm
 }
 

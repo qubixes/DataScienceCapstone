@@ -1,0 +1,69 @@
+CatFlip: A word Prediction Application
+========================================================
+author: Qubixes
+date: 23/12/2018
+autosize: true
+
+Introduction
+========================================================
+
+The application *CatFlip* is a word prediction algorithm; given a some chunk of text, predict the next word. At the present time, recurrent neural networks are the best at doing exactly this. However, given the time frame for this project, the *CatFlip* application makes use of the older approach of computing *n*-grams: frequencies of *n* consecutive words. For example, the 3-gram "I love you" is very common relatively speaking. Thus, if a user types in "I love", we are quite likely to suggest "you" as the third word. 
+
+Features of *CatFlip*:
+
+- Fast prediction: 2-20 milliseconds.
+- Fast and flexible training: critical path written in C++, adjustable memory limits for machines with less memory.
+- Multiple languages (4 implemented, but adding a new one is extremely simple).
+- Top 3 predictions
+- Good prediction performance (~27% top 3 for US English)
+- Modular approach with good possibilities of extension.
+
+Training with CatFlip
+========================================================
+
+- An important feature of the algorithm is that it can ignore *n*-grams below a certain frequency threshold. Not just throwing them away at the end. Thus, this saves a lot of memory and computing time, at the cost of some prediction performance.
+- Key insight: if an *(n-1)*-gram *s* is below a threshold, then any *n*-gram starting with *s* will be below the threshold as well.
+- Necessary to build with C++ because of protection buffer overflows with hash tables in R. 
+- Tokenization with R quanteda package.
+- Build a hash table of all 1-grams, then go through the same text again but only store a 2-gram (*X*,*Y*) if both are above the threshold  rate. 
+- Continue with 3, 4... *n*-grams.
+- Very little penalty of training high *n*-grams (but with high thresholds, no benefit either).
+- Possible improvement: decrease thresholds for larger *n*, probably need more data.
+- Training is simple:
+
+```{r, eval=FALSE}
+parameters <- list(threshold=1e-6, maxNGram=5, minOccurence=3, language="en_US", trainDir="train")
+myPredictionList <- TrainNGramPredictorList(trainDir = myTrainDir, parameters = parameters)
+myPredictor <- NewNGramPredictor(newPredList = myPredictionList, tokenizer = "fast")
+```
+- For prediction itself two tokenizers are supplied: "fast" (2 ms per word) or "slow" (20 ms per word). 
+- The "fast" tokenizer uses the quanteda "fastestword" algorithm, but due to a bug in the quanteda software has to remove punctuation again.
+- Algorithm replaces "." with a special word to mark end of sentences. This improves the algorithm with about 0.5% top 3 prediction, with little cost.
+
+Using the Application CatFlip
+========================================================
+
+- Application should be quite easy and fast to use. 
+- Training is done seperately 
+- Type something in the text box and the three buttons below will automatically update with predictions.
+- Best (presumed) prediction on the left, least likely prediction on the right.
+- Click the prediction to insert it into the text.
+- Drop down menu for choosing the language.
+- Checkbox for fast tokenization (recommended for large swathes of text).
+- Bar plot on the right showing the prediction performance of current text after hitting the refresh button.
+- Check box to show a comparison between different models.
+
+***
+
+![CatFlip](app.png)
+
+Performance and Outlook
+========================================================
+
+- Prediction performance is reasonable (below).
+- Finnish is clearly the hardest language for the algorithm.
+- Language filter can be easily implemented and inserted (after n-gram determination).
+- Using dictionaries/stemming might improve performance with the same limited data.
+
+
+![perf](prediction_rate.png)
