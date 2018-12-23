@@ -1,44 +1,39 @@
-#
-# This is the server logic of a Shiny web application. You can run the 
-# application by clicking 'Run App' above.
-#
-# Find out more about building applications with Shiny here:
-# 
-#    http://shiny.rstudio.com/
-#
+#server.R: Server side code for the CatFlip application. See shiny_load.R, shiny_tester.R and multipredictor.R for more details
+# on the actual algorithm and loading process. 
+
 
 library(shiny)
 library(ggplot2)
 library(data.table)
-library(shinyjs)
+
 source("multi_predictor.R")
 source("shiny_load.R")
 source("shiny_tester.R")
 
-choices <- character(3)
-
-langCodes = c(German="de_DE", English="en_US", Finnish="fi_FI", Russian="ru_RU")
 
 shinyServer(function(input, output, session) {
-    i<-1
-    
     memSizeChoices <- paste0(names(allThresholds), " (", memFormat, ")")
     updateSelectInput(session, "mem_usage", label="memory usage", choices = memSizeChoices, selected = memSizeChoices[length(memSizeChoices)])
     
+    #This is the predictor we'll be using most of the time. 
     myPred <- NewNGramPredictor()
+    
+    #Sometimes we want to manually refresh the buttons/plot.
     rv <- reactiveValues()
     rv$refreshPlot <- 0
+    rv$refreshButtons <- 0
     
+    #A copy of the current text most of the time. Probably better use isolate(), but it #works.
     curText <- ""
     
+    #Current predictions of the algorithm.
     newChoices <- character(3)
     
-    # observe({runjs(jsx)})
-    
-    observeEvent(input$curText, {
+    #If the text changes (i.e. something is typed/removed) or in case of a manual refresh, we update our preditions.
+    observeEvent({input$curText;rv$refreshButtons}, {
         if(input$curText != ""){
+             myPred$Start()
              newChoices <<- myPred$Next(input$curText)
-             
         } else {
             newChoices <<- myPred$Start()
         }
@@ -47,31 +42,28 @@ shinyServer(function(input, output, session) {
         updateActionButton(session, "choice3", label=newChoices[3])
      })
     
+    #If one of the buttons is pressed, put that prediction in the text box.
     observeEvent(input$choice1, {
-        updateTextAreaInput(session, "curText", value = paste0(input$curText, newChoices[1], " "));         print(newChoices[1])}
-    )
+        updateTextAreaInput(session, "curText", value = paste0(trimws(input$curText, "right"), " ", newChoices[1], " "));
+    })
     observeEvent(input$choice2, {
-        updateTextAreaInput(session, "curText", value = paste0(input$curText, newChoices[2], " "));         print(newChoices[2])}
-    )
+        updateTextAreaInput(session, "curText", value = paste0(trimws(input$curText, "right"), " ", newChoices[2], " "));
+    })
     observeEvent(input$choice3, {
-        updateTextAreaInput(session, "curText", value = paste0(input$curText, newChoices[3], " "));         print(newChoices[3])}
-    )
+        updateTextAreaInput(session, "curText", value = paste0(trimws(input$curText, "right"), " ", newChoices[3], " "));
+    })
     
-    observeEvent({input$language; input$mem_usage},
-    {
-        print(paste("Change in language/mem_usage", langCodes[[input$language]]))
+    #If the language or memory usage is changed, change the predictor accordingly.
+    observeEvent({input$language; input$mem_usage}, {
         newLang <- allLang[[input$language]]
         newMem <- which(input$mem_usage == memSizeChoices)
         if(length(newMem)<1) newMem<-1
         myPred$InitPredList(predictors[[newLang]][[newMem]])
-        newChoices <<- myPred$Start()
-        updateActionButton(session, "choice1", label=newChoices[1])
-        updateActionButton(session, "choice2", label=newChoices[2])
-        updateActionButton(session, "choice3", label=newChoices[3])
+        rv$refreshButtons <- rv$refreshButtons+1
     })
     
+    #Change from fast to slow tokenization (x10 speed difference) or vice versa.
     observeEvent(input$tokenize, {
-        print(paste("Change tokenization method:", input$tokenize));
         if(input$tokenize == T){
             myPred$SetTokenizer("fast");
         } else {
@@ -79,24 +71,24 @@ shinyServer(function(input, output, session) {
         }
     })
     
-    # observeEvent(input$mem_usage, {
-        # myPred$InitPredList(predictors[[allLanguages[[input$language]]]])
-    # })
+    # output$curLanguage <- renderText(paste("Current language: ", input$language))
     
-    output$curLanguage <- renderText(paste("Current language: ", input$language))
-    
+    #This is the event for the refresh button. Update the plot if it is pressed.
     observeEvent(input$recalcButton, {rv$refreshPlot <- rv$refreshPlot+1; curText <<- input$curText})
     
+    #Plot the prediction performance of the current text.
     pChoice <- c("all",as.character(1:3))
     output$testText <- renderPlot({
         if(rv$refreshPlot >= 0){
             if(input$test_all_models == F){
-                print(address(myPred))
+                #Here we only plot and test the performance of the currently selected model. 
                 fracCorrect <- TextTester(curText, myPred)
                 myDf <- data.frame(choice=factor(pChoice, levels=pChoice), correct=100*c(sum(fracCorrect), fracCorrect))
                 myDf$labels <- as.character(round(myDf$correct, digits=2))
+                #Plot with a bar histogram
                 g <- ggplot(data=myDf, aes(x=choice, y=correct, fill=choice)) + geom_bar(stat="identity") + geom_text(data=myDf, aes(x=choice, y=correct, label=labels), colour="black", vjust=2)
             } else {
+                #Otherwise plot with all model sizes, but the same language. Thus, we create a new predictor.
                 newPred <- NewNGramPredictor()
                 if(input$tokenize == T){
                     newPred$SetTokenizer("fast")
@@ -109,6 +101,7 @@ shinyServer(function(input, output, session) {
                 correctV <- numeric(0)
                 nameV <- character(0)
                 
+                #Create a long (tidy) vector from the test results of the different models.
                 for(iPred in 1:length(predictors[[curLang]])){
                     newPred$InitPredList(predictors[[curLang]][[iPred]])
                     fracCorrect <- TextTester(curText, newPred)
@@ -121,7 +114,7 @@ shinyServer(function(input, output, session) {
                                    models= factor(nameV, levels<- nameV[seq(length(nameV), 1, -4)]), labels = as.character(round(correctV,1)))
                 g <- ggplot(data=myDf, aes(x=choice, y=correct, fill=models)) + geom_bar(stat="identity", position=position_dodge()) + geom_text(data=myDf, aes(x=choice, y=correct, label=labels), colour="black", vjust=2, position=position_dodge(width=0.9))
             }
-            g
+            g + ylab("% correctly predicted")
         }
     })
 })
